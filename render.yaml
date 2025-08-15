@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: metabolical-chatbot
+    env: docker
+    dockerfilePath: ./Dockerfile.prod
+    plan: free
+    region: oregon
+    buildCommand: ""
+    startCommand: ""
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: GGUF_REPO
+        value: TheBloke/Llama-2-7B-Chat-GGUF
+      - key: GGUF_FILE
+        value: llama-2-7b-chat.Q4_K_M.gguf
+      - key: N_CTX
+        value: "2048"
+      - key: N_GPU_LAYERS
+        value: "0"
+    disk:
+      name: model-cache
+      mountPath: /home/app/.cache
+      sizeGB: 10

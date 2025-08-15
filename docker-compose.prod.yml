@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  chatbot:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    ports:
+      - "5000:5000"
+    environment:
+      # Model configuration
+
+#       //MODEL_REPO = os.getenv("GGUF_REPO", "TheBloke/Llama-2-7B-Chat-GGUF")
+# MODEL_FILE = os.getenv("GGUF_FILE", "llama-2-7b-chat.Q4_K_M.gguf")
+
+      - GGUF_REPO = TheBloke/Llama-2-7B-Chat-GGUF
+      - GGUF_FILE = llama-2-7b-chat.Q4_K_M.gguf
+      - N_CTX=2048
+      - N_GPU_LAYERS=0  # Set to >0 if you have CUDA support
+      - FLASK_ENV=production
+    volumes:
+      # Mount volume for model cache to persist downloads
+      - model_cache:/home/app/.cache/huggingface
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+volumes:
+  model_cache:
+    driver: local

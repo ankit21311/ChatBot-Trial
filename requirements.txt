@@ -1,0 +1,5 @@
+flask
+flask-cors
+huggingface_hub
+llama-cpp-python==0.2.90
+gunicorn
