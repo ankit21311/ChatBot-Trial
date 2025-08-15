@@ -1,5 +1,5 @@
-flask
-flask-cors
-huggingface_hub
+flask>=2.3.0
+flask-cors>=4.0.0
+huggingface_hub>=0.16.0
 llama-cpp-python==0.2.90
-gunicorn
+gunicorn>=21.0.0

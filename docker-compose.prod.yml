@@ -8,16 +8,16 @@ services:
     ports:
       - "5000:5000"
     environment:
-      # Model configuration
-
-#       //MODEL_REPO = os.getenv("GGUF_REPO", "TheBloke/Llama-2-7B-Chat-GGUF")
-# MODEL_FILE = os.getenv("GGUF_FILE", "llama-2-7b-chat.Q4_K_M.gguf")
-
-      - GGUF_REPO = TheBloke/Llama-2-7B-Chat-GGUF
-      - GGUF_FILE = llama-2-7b-chat.Q4_K_M.gguf
+      # Model configuration - Using lightweight TinyLlama for production
+      - GGUF_REPO=TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF
+      - GGUF_FILE=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
       - N_CTX=2048
       - N_GPU_LAYERS=0  # Set to >0 if you have CUDA support
+      
+      # Production security settings
       - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY}  # REQUIRED: Set this in your environment!
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}  # REQUIRED: Set your domain(s)
     volumes:
       # Mount volume for model cache to persist downloads
       - model_cache:/home/app/.cache/huggingface

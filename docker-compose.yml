@@ -11,6 +11,11 @@ services:
       - GGUF_FILE=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
       - N_CTX=2048
       - N_GPU_LAYERS=0  # Set to >0 if you have CUDA support
+      
+      # Production security settings
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY:-}  # Set this in production!
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5000,http://127.0.0.1:5000}
     volumes:
       # Mount volume for model cache to persist downloads
       - model_cache:/root/.cache/huggingface

@@ -3,7 +3,10 @@ from flask import Flask, request, jsonify, session, render_template
 from huggingface_hub import hf_hub_download
 from llama_cpp import Llama
 from flask_cors import CORS
-from datetime import timedelta
+from datetime import timedelta, datetime
+import secrets
+import re
+from functools import wraps
 
 # --------------------------------------------------------------------------
 # --- 1. Configuration ---
@@ -50,16 +53,122 @@ print("Model loaded successfully.")
 app = Flask(__name__)
 
 # Set a secret key for session management. This is crucial for security.
-# It's best practice to load this from an environment variable.
-app.secret_key = os.getenv("SECRET_KEY", "a-very-secret-and-secure-key-for-testing")
+# Generate a secure random key if not provided via environment variable.
+app.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
+
+# Production security configurations
+app.config.update(
+    SESSION_COOKIE_SECURE=os.getenv("FLASK_ENV") == "production",  # HTTPS only in production
+    SESSION_COOKIE_HTTPONLY=True,  # Prevent XSS attacks
+    SESSION_COOKIE_SAMESITE='Lax',  # CSRF protection
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=2)
+)
 
 # Set the session to be permanent with a 2-hour lifetime.
 app.permanent_session_lifetime = timedelta(hours=2)
 
-# Configure CORS (Cross-Origin Resource Sharing) for the chat API endpoint.
-# This allows web pages from any origin to call the API.
-# `supports_credentials=True` is necessary for sessions (cookies) to work correctly.
-CORS(app, resources={r"/chat": {"origins": "*"}, r"/api/chat": {"origins": "*"}}, supports_credentials=True)
+# Configure CORS (Cross-Origin Resource Sharing) for production deployment.
+# Load allowed origins from environment variable for security.
+# Default to localhost for development, but should be set to actual domain(s) in production.
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5000,http://127.0.0.1:5000").split(",")
+
+# Production-ready CORS configuration
+CORS(app, 
+     resources={
+         r"/chat": {
+             "origins": ALLOWED_ORIGINS,
+             "methods": ["POST"],
+             "allow_headers": ["Content-Type", "Authorization"],
+             "expose_headers": ["Content-Type"],
+             "max_age": 3600  # Cache preflight requests for 1 hour
+         },
+         r"/api/chat": {
+             "origins": ALLOWED_ORIGINS,
+             "methods": ["POST"],
+             "allow_headers": ["Content-Type", "Authorization"],
+             "expose_headers": ["Content-Type"],
+             "max_age": 3600
+         }
+     }, 
+     supports_credentials=True)
+
+# Add security headers for production
+@app.after_request
+def add_security_headers(response):
+    """Add security headers to all responses."""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    
+    # Only add HSTS in production with HTTPS
+    if os.getenv("FLASK_ENV") == "production":
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    
+    return response
+
+# Rate limiting for production
+def rate_limit(max_requests=10, window_minutes=1):
+    """Simple rate limiting decorator."""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # Get client IP
+            client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+            if client_ip:
+                client_ip = client_ip.split(',')[0].strip()
+            
+            # Rate limiting key
+            rate_key = f"rate_limit_{client_ip}"
+            
+            # Get current requests from session (simple in-memory rate limiting)
+            current_time = datetime.now()
+            if rate_key not in session:
+                session[rate_key] = []
+            
+            # Clean old requests
+            session[rate_key] = [
+                req_time for req_time in session[rate_key] 
+                if (current_time - datetime.fromisoformat(req_time)).total_seconds() < window_minutes * 60
+            ]
+            
+            # Check rate limit
+            if len(session[rate_key]) >= max_requests:
+                return jsonify({"error": "Rate limit exceeded. Please try again later."}), 429
+            
+            # Add current request
+            session[rate_key].append(current_time.isoformat())
+            session.modified = True
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+# Input validation
+def validate_message(message):
+    """Validate user input for security."""
+    if not message or not isinstance(message, str):
+        return False, "Message must be a non-empty string"
+    
+    # Length validation
+    if len(message) > 1000:
+        return False, "Message too long (max 1000 characters)"
+    
+    if len(message.strip()) < 1:
+        return False, "Message cannot be empty"
+    
+    # Basic content filtering (you can expand this)
+    suspicious_patterns = [
+        r'<script.*?>.*?</script>',  # Script tags
+        r'javascript:',  # JavaScript URLs
+        r'on\w+\s*=',  # Event handlers
+    ]
+    
+    for pattern in suspicious_patterns:
+        if re.search(pattern, message, re.IGNORECASE):
+            return False, "Message contains potentially harmful content"
+    
+    return True, "Valid"
 
 # --------------------------------------------------------------------------
 # --- 4. System Prompt and Response Cleaning ---
@@ -100,6 +209,7 @@ def index():
 
 @app.route("/chat", methods=["POST"])
 @app.route("/api/chat", methods=["POST"])
+@rate_limit(max_requests=20, window_minutes=1)  # Allow 20 requests per minute
 def chat():
     """
     Handles the chat interaction. It receives a user message, maintains
@@ -110,8 +220,11 @@ def chat():
         # --- Get User Input ---
         data = request.get_json(force=True)
         user_msg = (data.get("message") or "").strip()
-        if not user_msg:
-            return jsonify({"error": "Message cannot be empty"}), 400
+        
+        # Validate input
+        is_valid, validation_message = validate_message(user_msg)
+        if not is_valid:
+            return jsonify({"error": validation_message}), 400
 
         # --- Manage Conversation History ---
         # Load messages from the session, or start a new list.
