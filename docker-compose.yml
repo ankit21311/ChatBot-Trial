@@ -6,9 +6,9 @@ services:
     ports:
       - "5000:5000"
     environment:
-      # Model configuration
-      - GGUF_REPO=TheBloke/Llama-2-7B-Chat-GGUF
-      - GGUF_FILE=llama-2-7b-chat.Q4_K_M.gguf
+      # Model configuration - Using lightweight TinyLlama (~600MB)
+      - GGUF_REPO=TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF
+      - GGUF_FILE=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
       - N_CTX=2048
       - N_GPU_LAYERS=0  # Set to >0 if you have CUDA support
     volumes:

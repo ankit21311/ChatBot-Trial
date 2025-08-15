@@ -10,8 +10,9 @@ from datetime import timedelta
 # --------------------------------------------------------------------------
 # Load model configuration from environment variables with sensible defaults.
 # This allows for flexible deployment without changing the code.
-MODEL_REPO = os.getenv("GGUF_REPO", "TheBloke/Llama-2-7B-Chat-GGUF")
-MODEL_FILE = os.getenv("GGUF_FILE", "llama-2-7b-chat.Q4_K_M.gguf")
+# Using TinyLlama for lightweight deployment (~600MB vs ~4GB)
+MODEL_REPO = os.getenv("GGUF_REPO", "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF")
+MODEL_FILE = os.getenv("GGUF_FILE", "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
 
 # Configure model parameters.
 # N_THREADS is set to one less than the CPU count for optimal performance.
